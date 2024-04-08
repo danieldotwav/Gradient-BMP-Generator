@@ -104,12 +104,11 @@ public:
         of.write((const char*)data.data(), data.size());
     }
 
-private:
     void set_pixel(int x, int y) {
         if (x >= 0 && x < bmp_info_header.width && y >= 0 && y < bmp_info_header.height) {
-            data[y * row_stride + x * 3 + 0] = 0; // Blue
-            data[y * row_stride + x * 3 + 1] = 0; // Green
-            data[y * row_stride + x * 3 + 2] = 0; // Red
+            data[y * row_stride + x * 3 + 0] = 255; // Blue
+            data[y * row_stride + x * 3 + 1] = 255; // Green
+            data[y * row_stride + x * 3 + 2] = 255; // Red
         }
     }
 };
