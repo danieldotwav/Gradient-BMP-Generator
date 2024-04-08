@@ -4,6 +4,8 @@
 #include <windows.h>
 #include <cmath> // For std::abs
 
+const int BITMAP_SIZE = 256;
+
 #pragma pack(push, 1)
 struct BMPFileHeader {
     uint16_t file_type{ 0x4D42 };          // File type always BM which is 0x4D42
@@ -91,6 +93,17 @@ public:
         }
     }
 
+    void fill_background_black() {
+        for (int y = 0; y < bmp_info_header.height; y++) {
+            for (int x = 0; x < bmp_info_header.width; x++) {
+                // Set each pixel's color to white
+                data[y * row_stride + x * 3 + 0] = 0; // Blue
+                data[y * row_stride + x * 3 + 1] = 0; // Green
+                data[y * row_stride + x * 3 + 2] = 0; // Red
+            }
+        }
+    }
+
     void draw_line(int x0, int y0, int x1, int y1) {
         // Bresenham's line algorithm
         int dx = std::abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
@@ -103,6 +116,58 @@ public:
             e2 = 2 * err;
             if (e2 >= dy) { err += dy; x0 += sx; }
             if (e2 <= dx) { err += dx; y0 += sy; }
+        }
+    }
+
+    void drawLine(int x0, int y0, int x1, int y1) {
+        char bits[256][256];
+        int dx = std::abs(x1 - x0);
+        int dy = std::abs(y1 - y0);
+        int sx = (x0 < x1) ? 1 : -1;
+        int sy = (y0 < y1) ? 1 : -1;
+        int err = dx - dy;
+
+        __asm {
+            mov esi, bits
+            mov edi, 256
+
+            mov eax, x0
+            mov ebx, y0
+            mov ecx, x1
+            mov edx, y1
+
+            BresenhamLoop :
+            movzx eax, ax
+                movzx ebx, bx
+                mov byte ptr[esi + ebx * edi + eax], 255
+
+                cmp ecx, x1
+                je EndBresenhamLoop
+
+                mov ebx, sy
+                imul ebx, dy
+                add ebx, err
+                jge UpdateX
+
+                add eax, sx
+                jmp UpdateY
+
+                UpdateX :
+            add ebx, dy
+
+                UpdateY :
+            mov ecx, sx
+                imul ecx, dx
+                add ecx, ecx
+                sub ebx, ecx
+                mov err, ebx
+
+                add ebx, sy
+                mov sy, ebx
+
+                jmp BresenhamLoop
+
+                EndBresenhamLoop :
         }
     }
 
@@ -127,14 +192,19 @@ public:
 int main() {
     try {
         int x0, y0, x1, y1;
+        char bits[256][256];
+
         std::cout << "Enter the first pair of integers (x0, y0): ";
         std::cin >> x0 >> y0;
         std::cout << "Enter the second pair of integers (x1, y1): ";
         std::cin >> x1 >> y1;
 
         BMP bmp(256, 256); // Specify the dimensions of the bitmap image
-        bmp.fill_gradient_vertical();
-        bmp.draw_line(x0, y0, x1, y1);
+        //bmp.fill_gradient_vertical();
+        //bmp.fill_background_white();
+        bmp.fill_background_black();
+        //bmp.draw_line(x0, y0, x1, y1);
+        bmp.drawLine(x0, y0, x1, y1);
         bmp.write("line.bmp");
         std::cout << "Line BMP file created." << std::endl;
 
