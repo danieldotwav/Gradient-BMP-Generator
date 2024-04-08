@@ -80,6 +80,17 @@ public:
         }
     }
 
+    void fill_background_white() {
+        for (int y = 0; y < bmp_info_header.height; y++) {
+            for (int x = 0; x < bmp_info_header.width; x++) {
+                // Set each pixel's color to white
+                data[y * row_stride + x * 3 + 0] = 255; // Blue
+                data[y * row_stride + x * 3 + 1] = 255; // Green
+                data[y * row_stride + x * 3 + 2] = 255; // Red
+            }
+        }
+    }
+
     void draw_line(int x0, int y0, int x1, int y1) {
         // Bresenham's line algorithm
         int dx = std::abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
