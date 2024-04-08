@@ -2,6 +2,7 @@
 #include <fstream>
 #include <vector>
 #include <windows.h>
+#include <cmath> // For std::abs
 
 #pragma pack(push, 1)
 struct BMPFileHeader {
@@ -25,19 +26,15 @@ struct BMPInfoHeader {
     uint32_t colors_used{ 0 };             // No. color indexes in the color table. Use 0 for the max number of colors allowed by bit_count
     uint32_t colors_important{ 0 };        // No. of colors used for displaying the bitmap. If 0 all colors are required
 };
-
-struct BMPColorHeader {
-    uint32_t red_mask{ 0x00ff0000 };       // Bit mask for the red channel
-    uint32_t green_mask{ 0x0000ff00 };     // Bit mask for the green channel
-    uint32_t blue_mask{ 0x000000ff };      // Bit mask for the blue channel
-    uint32_t alpha_mask{ 0xff000000 };     // Bit mask for the alpha channel
-    uint32_t color_space_type{ 0x73524742 }; // Default "sRGB" (0x73524742)
-    uint32_t unused[16]{ 0 };              // Unused data for sRGB color space
-};
 #pragma pack(pop)
 
 class BMP {
 public:
+    BMPFileHeader file_header;
+    BMPInfoHeader bmp_info_header;
+    std::vector<uint8_t> data;
+    int row_stride{ 0 };
+
     BMP(int32_t width, int32_t height, bool has_alpha = false) {
         if (width <= 0 || height <= 0) {
             throw std::runtime_error("The image width and height must be positive numbers.");
@@ -83,11 +80,20 @@ public:
         }
     }
 
-private:
-    BMPFileHeader file_header;
-    BMPInfoHeader bmp_info_header;
-    std::vector<uint8_t> data;
-    int row_stride{ 0 };
+    void draw_line(int x0, int y0, int x1, int y1) {
+        // Bresenham's line algorithm
+        int dx = std::abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+        int dy = -std::abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+        int err = dx + dy, e2;
+
+        while (true) {
+            set_pixel(x0, y0);
+            if (x0 == x1 && y0 == y1) break;
+            e2 = 2 * err;
+            if (e2 >= dy) { err += dy; x0 += sx; }
+            if (e2 <= dx) { err += dx; y0 += sy; }
+        }
+    }
 
     void write_headers(std::ofstream& of) {
         of.write((const char*)&file_header, sizeof(file_header));
@@ -97,17 +103,33 @@ private:
     void write_data(std::ofstream& of) {
         of.write((const char*)data.data(), data.size());
     }
+
+private:
+    void set_pixel(int x, int y) {
+        if (x >= 0 && x < bmp_info_header.width && y >= 0 && y < bmp_info_header.height) {
+            data[y * row_stride + x * 3 + 0] = 0; // Blue
+            data[y * row_stride + x * 3 + 1] = 0; // Green
+            data[y * row_stride + x * 3 + 2] = 0; // Red
+        }
+    }
 };
 
 int main() {
     try {
-        BMP bmp(1256, 1256); //.Specify the dimensions of the paint image
+        int x0, y0, x1, y1;
+        std::cout << "Enter the first pair of integers (x0, y0): ";
+        std::cin >> x0 >> y0;
+        std::cout << "Enter the second pair of integers (x1, y1): ";
+        std::cin >> x1 >> y1;
+
+        BMP bmp(256, 256); // Specify the dimensions of the bitmap image
         bmp.fill_gradient_vertical();
-        bmp.write("gradient_stripes.bmp");
-        std::cout << "Gradient BMP file created." << std::endl;
+        bmp.draw_line(x0, y0, x1, y1);
+        bmp.write("line.bmp");
+        std::cout << "Line BMP file created." << std::endl;
 
         // Open the BMP file in Microsoft Paint
-        system("start mspaint gradient_stripes.bmp");
+        system("start mspaint line.bmp");
     }
     catch (std::exception& e) {
         std::cout << e.what() << std::endl;
