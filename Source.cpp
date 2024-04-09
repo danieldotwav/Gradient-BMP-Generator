@@ -1,10 +1,12 @@
 #include <iostream>
+#include <cstdlib>
 #include <fstream>
 #include <vector>
 #include <windows.h>
 #include <cmath> // For std::abs
+#include <limits>
 
-const int BITMAP_SIZE = 256;
+const int CANVAS_WIDTH = 256; // Assuming BITMAP_SIZE is defined somewhere
 
 #pragma pack(push, 1)
 struct BMPFileHeader {
@@ -119,55 +121,60 @@ public:
         }
     }
 
-    void drawLine(int x0, int y0, int x1, int y1) {
+    void drawLine(int x1, int y1, int x2, int y2) {
+        int distX = std::abs(x2 - x1);
+        int sx = x1 < x2 ? 1 : -1;
+        int distY = -std::abs(y2 - y1);
+        int sy = y1 < y2 ? 1 : -1;
+        int err = distX + distY, e2;
         char bits[256][256];
-        int dx = std::abs(x1 - x0);
-        int dy = std::abs(y1 - y0);
-        int sx = (x0 < x1) ? 1 : -1;
-        int sy = (y0 < y1) ? 1 : -1;
-        int err = dx - dy;
 
         __asm {
-            mov esi, bits
-            mov edi, 256
+            mov esi, x1            // Load x1 into esi
+            mov edi, y1            // Load y1 into edi
+            mov edx, distX         // Load distX into edx
+            mov ecx, distY         // Load distY into ecx
+            mov eax, err           // Load err into eax
 
-            mov eax, x0
-            mov ebx, y0
-            mov ecx, x1
-            mov edx, y1
+            lea ebx, bits          // Load the base address of bits into ebx
 
-            BresenhamLoop :
-            movzx eax, ax
-                movzx ebx, bx
-                mov byte ptr[esi + ebx * edi + eax], 255
+            loop_start :
+            // Calculate the offset for the bits array in terms of the element size
+            mov ebx, esi           // Copy x1 into ebx
+                imul ebx, 256          // Multiply x1 by row size
+                add ebx, edi           // Add y1 to get the offset
+                // We now have the offset for the bits array in ebx
 
-                cmp ecx, x1
-                je EndBresenhamLoop
+                push ebx               // Save the current offset on the stack
+                add ebx, [bits]        // Add the offset to the base address of bits
 
-                mov ebx, sy
-                imul ebx, dy
-                add ebx, err
-                jge UpdateX
+                mov dl, [ebx]          // Load the current value at bits[x1][y1] into dl
+                xor dl, 0xFF           // XOR with 255 to invert the pixel value
+                mov[ebx], dl          // Store the result back into bits[x1][y1]
 
-                add eax, sx
-                jmp UpdateY
+                pop ebx                // Restore the offset into ebx
 
-                UpdateX :
-            add ebx, dy
-
-                UpdateY :
-            mov ecx, sx
-                imul ecx, dx
-                add ecx, ecx
-                sub ebx, ecx
-                mov err, ebx
-
-                add ebx, sy
-                mov sy, ebx
-
-                jmp BresenhamLoop
-
-                EndBresenhamLoop :
+                // Bresenham's algorithm loop and condition checks
+                shl eax, 1             // Multiply err by 2 for comparison
+                cmp eax, ecx           // Compare 2*err with distY
+                jge adjust_x           // If 2*err >= distY, adjust x
+                jmp check_end
+                adjust_x :
+            add eax, ecx           // Adjust err
+                add esi, sx            // Adjust x1
+                check_end :
+            shl eax, 1             // Multiply err by 2 again for comparison
+                cmp eax, edx           // Compare 2*err with distX
+                jle adjust_y           // If 2*err <= distX, adjust y
+                jmp next
+                adjust_y :
+            sub eax, edx           // Adjust err
+                add edi, sy            // Adjust y1
+                next :
+            cmp esi, x2            // Check if x1 == x2
+                jne loop_start         // Continue if not equal
+                cmp edi, y2            // Check if y1 == y2
+                jne loop_start         // Continue if not equal
         }
     }
 
@@ -191,25 +198,44 @@ public:
 
 int main() {
     try {
-        int x0, y0, x1, y1;
+        int x1, y1, x2, y2;
         char bits[256][256];
 
-        std::cout << "Enter the first pair of integers (x0, y0): ";
-        std::cin >> x0 >> y0;
-        std::cout << "Enter the second pair of integers (x1, y1): ";
-        std::cin >> x1 >> y1;
+        std::cout << "Enter two pairs of point coordinates in the range of 0-" << CANVAS_WIDTH << ".\n";
+        std::cin >> x1 >> y1 >> x2 >> y2;
 
-        BMP bmp(256, 256); // Specify the dimensions of the bitmap image
-        //bmp.fill_gradient_vertical();
-        //bmp.fill_background_white();
-        bmp.fill_background_black();
-        //bmp.draw_line(x0, y0, x1, y1);
-        bmp.drawLine(x0, y0, x1, y1);
-        bmp.write("line.bmp");
-        std::cout << "Line BMP file created." << std::endl;
+        // Print appropriate error messages if applicable
+        bool is_valid_input = 1;
+        if (x1 < 0 || x1 > CANVAS_WIDTH) {
+            std::cout << "Value " << x1 << " out of range, ending.\n";
+            is_valid_input = 0;
+        }
+        if (y1 < 0 || y1 > CANVAS_WIDTH) {
+            std::cout << "Value " << y1 << " out of range, ending.\n";
+            is_valid_input = 0;
+        }
+        if (x2 < 0 || x2 > CANVAS_WIDTH) {
+            std::cout << "Value " << x2 << " out of range, ending.\n";
+            is_valid_input = 0;
+        }
+        if (y2 < 0 || y2 > CANVAS_WIDTH) {
+            std::cout << "Value " << y2 << " out of range, ending.\n";
+            is_valid_input = 0;
+        }
 
-        // Open the BMP file in Microsoft Paint
-        system("start mspaint line.bmp");
+        if (is_valid_input) {
+            BMP bmp(256, 256); // Specify the dimensions of the bitmap image
+            bmp.fill_gradient_vertical();
+            //bmp.fill_background_white();
+            //bmp.fill_background_black();
+            //bmp.draw_line(x0, y0, x1, y1);
+            bmp.drawLine(x1, y1, x2, y2);
+            bmp.write("line.bmp");
+            std::cout << "Line BMP file created." << std::endl;
+
+            // Open the BMP file in Microsoft Paint
+            system("start mspaint line.bmp");
+        }
     }
     catch (std::exception& e) {
         std::cout << e.what() << std::endl;
