@@ -122,59 +122,42 @@ public:
     }
 
     void drawLine(int x1, int y1, int x2, int y2) {
-        int distX = std::abs(x2 - x1);
-        int sx = x1 < x2 ? 1 : -1;
-        int distY = -std::abs(y2 - y1);
-        int sy = y1 < y2 ? 1 : -1;
+        int distX = std::abs(x2 - x1), sx = x1 < x2 ? 1 : -1;
+        int distY = -std::abs(y2 - y1), sy = y1 < y2 ? 1 : -1;
         int err = distX + distY, e2;
-        char bits[256][256];
 
-        __asm {
-            mov esi, x1            // Load x1 into esi
-            mov edi, y1            // Load y1 into edi
-            mov edx, distX         // Load distX into edx
-            mov ecx, distY         // Load distY into ecx
-            mov eax, err           // Load err into eax
+        while (true) {
+            if (x1 >= 0 && x1 < bmp_info_header.width && y1 >= 0 && y1 < bmp_info_header.height) {
+                // Calculate the offset in the BMP's data vector
+                int pixelOffset = ((bmp_info_header.height - 1 - y1) * bmp_info_header.width + x1) * 3;
 
-            lea ebx, bits          // Load the base address of bits into ebx
+                // Ensure the offset is within bounds
+                if (pixelOffset >= 0 && pixelOffset < data.size() - 3) {
+                    // Use inline assembly to set the pixel color to white
+                    __asm {
+                        mov eax, dword ptr[this]; Move the this pointer into eax
+                        mov eax, [eax]BMP.data; Access the data member of BMP
+                        add eax, pixelOffset; Add the pixelOffset to the base address of data
+                        mov byte ptr[eax], 255; Set the blue component to 255
+                        mov byte ptr[eax + 1], 255; Set the green component to 255
+                        mov byte ptr[eax + 2], 255; Set the red component to 255
+                    }
+                }
+            }
 
-            loop_start :
-            // Calculate the offset for the bits array in terms of the element size
-            mov ebx, esi           // Copy x1 into ebx
-                imul ebx, 256          // Multiply x1 by row size
-                add ebx, edi           // Add y1 to get the offset
-                // We now have the offset for the bits array in ebx
+            if (x1 == x2 && y1 == y2) break;
 
-                push ebx               // Save the current offset on the stack
-                add ebx, [bits]        // Add the offset to the base address of bits
-
-                mov dl, [ebx]          // Load the current value at bits[x1][y1] into dl
-                xor dl, 0xFF           // XOR with 255 to invert the pixel value
-                mov[ebx], dl          // Store the result back into bits[x1][y1]
-
-                pop ebx                // Restore the offset into ebx
-
-                // Bresenham's algorithm loop and condition checks
-                shl eax, 1             // Multiply err by 2 for comparison
-                cmp eax, ecx           // Compare 2*err with distY
-                jge adjust_x           // If 2*err >= distY, adjust x
-                jmp check_end
-                adjust_x :
-            add eax, ecx           // Adjust err
-                add esi, sx            // Adjust x1
-                check_end :
-            shl eax, 1             // Multiply err by 2 again for comparison
-                cmp eax, edx           // Compare 2*err with distX
-                jle adjust_y           // If 2*err <= distX, adjust y
-                jmp next
-                adjust_y :
-            sub eax, edx           // Adjust err
-                add edi, sy            // Adjust y1
-                next :
-            cmp esi, x2            // Check if x1 == x2
-                jne loop_start         // Continue if not equal
-                cmp edi, y2            // Check if y1 == y2
-                jne loop_start         // Continue if not equal
+            e2 = 2 * err;
+            if (e2 >= distY) {
+                if (x1 == x2) break;
+                err += distY;
+                x1 += sx;
+            }
+            if (e2 <= distX) {
+                if (y1 == y2) break;
+                err += distX;
+                y1 += sy;
+            }
         }
     }
 
@@ -199,7 +182,6 @@ public:
 int main() {
     try {
         int x1, y1, x2, y2;
-        char bits[256][256];
 
         std::cout << "Enter two pairs of point coordinates in the range of 0-" << CANVAS_WIDTH << ".\n";
         std::cin >> x1 >> y1 >> x2 >> y2;
