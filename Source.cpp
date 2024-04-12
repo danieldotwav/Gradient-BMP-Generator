@@ -135,12 +135,12 @@ public:
                 if (pixelOffset >= 0 && pixelOffset < data.size() - 3) {
                     // Use inline assembly to set the pixel color to white
                     __asm {
-                        mov eax, dword ptr[this]; Move the this pointer into eax
-                        mov eax, [eax]BMP.data; Access the data member of BMP
-                        add eax, pixelOffset; Add the pixelOffset to the base address of data
-                        mov byte ptr[eax], 255; Set the blue component to 255
-                        mov byte ptr[eax + 1], 255; Set the green component to 255
-                        mov byte ptr[eax + 2], 255; Set the red component to 255
+                        mov eax, dword ptr[this];    Move the this pointer into eax
+                        mov eax, [eax]BMP.data;      Access the data member of BMP
+                        add eax, pixelOffset;        Add the pixelOffset to the base address of data
+                        mov byte ptr[eax], 255;      Set the blue component to 255
+                        mov byte ptr[eax + 1], 255;  Set the green component to 255
+                        mov byte ptr[eax + 2], 255;  Set the red component to 255
                     }
                 }
             }
@@ -204,6 +204,37 @@ int main() {
             std::cout << "Value " << y2 << " out of range, ending.\n";
             is_valid_input = 0;
         }
+
+        BITMAPFILEHEADER bmfh;
+        BITMAPINFOHEADER bmih;
+        char colorTable[CANVAS_WIDTH];
+        char bits[CANVAS_WIDTH][CANVAS_WIDTH] = { 0 };
+
+        std::ofstream bmpOut("foo.bmp", std::ios::out | std::ios::binary);
+        if (!bmpOut) {
+            std::cout << "...could not open file, ending.";
+            return -1;
+        }
+
+        // Initialize the bitmap file header
+        bmfh.bfType = 0x4d42;  // 'BM'
+        bmfh.bfSize = sizeof(bmfh) + sizeof(bmih) + sizeof(colorTable) + IMAGE_SIZE * IMAGE_SIZE;
+        bmfh.bfReserved1 = 0;
+        bmfh.bfReserved2 = 0;
+        bmfh.bfOffBits = sizeof(bmfh) + sizeof(bmih) + sizeof(colorTable);
+
+        // Initialize the bitmap info header
+        bmih.biSize = sizeof(bmih);
+        bmih.biWidth = IMAGE_SIZE;
+        bmih.biHeight = IMAGE_SIZE;
+        bmih.biPlanes = 1;
+        bmih.biBitCount = 8;
+        bmih.biCompression = BI_RGB;
+        bmih.biSizeImage = 0;  // No compression
+        bmih.biXPelsPerMeter = 2835;
+        bmih.biYPelsPerMeter = 2835;
+        bmih.biClrUsed = 256;
+        bmih.biClrImportant = 0;
 
         if (is_valid_input) {
             BMP bmp(256, 256); // Specify the dimensions of the bitmap image
