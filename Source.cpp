@@ -8,24 +8,27 @@
 
 const int CANVAS_WIDTH = 256; // Assuming BITMAP_SIZE is defined somewhere
 
-void draw_line(int x0, int y0, int x1, int y1, std::vector<uint8_t> data, int row_stride) {
-    // Bresenham's line algorithm
+void draw_line(int x0, int y0, int x1, int y1, std::vector<uint8_t>& data, int row_stride) {
+    // Flip the y-coordinates since BMP format starts from the bottom-left corner
+    y0 = CANVAS_WIDTH - 1 - y0;
+    y1 = CANVAS_WIDTH - 1 - y1;
+
     int dx = std::abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
-    int dy = -std::abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    int dy = -std::abs(y1 - y0), sy = y0 < y1 ? 1 : -1; // This will be negative as the coordinates are flipped
     int err = dx + dy, e2;
 
     while (true) {
-        /*set_pixel(x0, y0);*/
-        if (x1 >= 0 && x1 < CANVAS_WIDTH && y1 >= 0 && y1 < CANVAS_WIDTH) {
-            data[y1 * row_stride + x1 * 3 + 0] = 255; // Blue
-            data[y1 * row_stride + x1 * 3 + 1] = 255; // Green
-            data[y1 * row_stride + x1 * 3 + 2] = 255; // Red
+        if (x0 >= 0 && x0 < CANVAS_WIDTH && y0 >= 0 && y0 < CANVAS_WIDTH) {
+            int index = y0 * row_stride + x0 * 3;
+            data[index + 0] = 255; // Set Blue to max
+            data[index + 1] = 255; // Set Green to max
+            data[index + 2] = 255; // Set Red to max
         }
 
         if (x0 == x1 && y0 == y1) break;
         e2 = 2 * err;
-        if (e2 >= dy) { err += dy; x0 += sx; }
-        if (e2 <= dx) { err += dx; y0 += sy; }
+        if (e2 > dy) { err += dy; x0 += sx; }
+        if (e2 < dx) { err += dx; y0 += sy; } // sy will move the y coordinate in the correct direction due to flip
     }
 }
 
