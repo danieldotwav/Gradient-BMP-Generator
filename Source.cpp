@@ -90,24 +90,23 @@ int main() {
 }
 
 void draw_line(int x0, int y0, int x1, int y1, std::vector<uint8_t>& data, int row_stride) {
-    // Flip the y-coordinates since BMP format starts from the bottom-left corner
+    // Flip the y-coordinates
     y0 = CANVAS_WIDTH - 1 - y0;
     y1 = CANVAS_WIDTH - 1 - y1;
 
-    int dx = std::abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
-    int dy = -std::abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
-    int err = dx + dy, e2;
+    int distX = std::abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    int distY = -std::abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    int err = distX + distY, e2;
+
+    uint8_t* data_ptr = data.data();  // Get the pointer to the vector's internal buffer
 
     __asm {
-        mov eax, x0      // Move x0 to eax
-        mov ebx, y0      // Move y0 to ebx
-        mov ecx, x1      // Move x1 to ecx
-        mov edx, y1      // Move y1 to edx
-        mov esi, err     // Move err to esi
-        mov edi, dy      // Move dy to edi
-        jmp check        // Jump to the beginning of loop checking condition
+        mov eax, x0      // Start x
+        mov ebx, y0      // Start y
+        mov ecx, data_ptr  // Vector data pointer
+
         loop_start :
-        // Check pixel bounds and set color
+        // Check bounds
         cmp eax, 0
             jl out_of_bounds
             cmp eax, CANVAS_WIDTH
@@ -117,55 +116,43 @@ void draw_line(int x0, int y0, int x1, int y1, std::vector<uint8_t>& data, int r
             cmp ebx, CANVAS_WIDTH
             jge out_of_bounds
 
-            // Calculate index: index = ebx * row_stride + eax * 3
+            // Calculate index = ebx * row_stride + eax * 3
             mov edi, ebx
             imul edi, row_stride
             mov esi, eax
-            lea esi, [esi + esi * 2]  // eax * 3
-            add edi, esi          // edi = ebx * row_stride + eax * 3
-            mov esi, [data]       // pointer to data vector storage
-            add esi, edi          // esi = address to write to
+            lea esi, [esi + esi * 2]  // esi = eax * 3
+            add edi, esi              // edi = ebx * row_stride + eax * 3
+            add edi, ecx              // edi = pointer to the pixel data
 
-            mov byte ptr[esi], 255     // Set Blue to max
-            mov byte ptr[esi + 1], 255   // Set Green to max
-            mov byte ptr[esi + 2], 255   // Set Red to max
+            // Set color to maximum values (white)
+            mov byte ptr[edi], 255    // Set Blue
+            mov byte ptr[edi + 1], 255  // Set Green
+            mov byte ptr[edi + 2], 255  // Set Red
 
             out_of_bounds:
-        // Check end condition
-        cmp eax, ecx
-            jne continue_loop
-            cmp ebx, edx
-            je loop_end
-
-            continue_loop :
-        // Calculate error
-        mov edi, esi         // Move err to edi for calculations
-            shl edi, 1           // edi = 2 * err
-            mov esi, edi         // Copy to esi for comparison
-            cmp esi, edx         // Compare with dy
-            jg adjust_x
-            jmp adjust_y
-
+        // Bresenham's line algorithm calculations
+        mov esi, err         // Current error
+            shl esi, 1           // esi = 2 * err
+            mov edx, distY
+            neg edx              // edx = -distY
+            cmp esi, edx
+            jle adjust_y
             adjust_x :
-        add err, dy          // err += dy
-            add eax, sx          // x0 += sx
+        add esi, edx         // err += distY
+            mov err, esi
+            add eax, sx          // Increment x
+            jmp check_end
 
             adjust_y :
-        cmp esi, dx          // Compare with dx
-            jl no_y_adjust       // Jump if no adjustment needed
-            add err, dx          // err += dx
-            add ebx, sy          // y0 += sy
-            no_y_adjust :
-        jmp loop_start       // Continue loop
+        sub esi, distX       // err -= distX
+            mov err, esi
+            add ebx, sy          // Increment y
 
-            loop_end :
-    check:
-        // This is to ensure the condition is checked before first iteration
-        cmp eax, ecx         // Compare x0 with x1
-            jne loop_start       // Jump if not equal
-            cmp ebx, edx         // Compare y0 with y1
+            check_end :
+        cmp eax, x1          // Check if end of line
+            jne loop_start
+            cmp ebx, y1
             jne loop_start
     }
-
 }
 
