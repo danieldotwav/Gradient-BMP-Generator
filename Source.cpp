@@ -8,8 +8,7 @@
 
 const int CANVAS_WIDTH = 256;
 
-void draw_line(int x0, int y0, int x1, int y1, std::vector<uint8_t>& data, int row_stride);
-void draw_lineCPP(int x0, int y0, int x1, int y1, std::vector<uint8_t>& data, int row_stride);
+void drawLine(int x0, int y0, int x1, int y1, std::vector<uint8_t>& data, int row_stride);
 
 int main() {
     try {
@@ -51,8 +50,7 @@ int main() {
         }
 
         // Draw the line using Bresenham's algorithm
-        //draw_line(x1, y1, x2, y2, data, row_stride);
-        draw_lineCPP(x1, y1, x2, y2, data, row_stride);
+        drawLine(x1, y1, x2, y2, data, row_stride);
 
         // Prepare bitmap file headers
         bmfh.bfType = 0x4d42; // 'BM'
@@ -91,191 +89,70 @@ int main() {
     return 0;
 }
 
-void draw_line(int xa, int ya, int xb, int yb, std::vector<uint8_t>& data, int row_stride) {
-    unsigned char bits[CANVAS_WIDTH][CANVAS_WIDTH]; // Array to hold pixel values
+void draw_line(int x0, int y0, int x1, int y1, std::vector<uint8_t>& data, int row_stride) {
+    // Flip the y-coordinates
+    y0 = CANVAS_WIDTH - 1 - y0;
+    y1 = CANVAS_WIDTH - 1 - y1;
 
-    int x, y, xEnd;
-    int deltaX = abs(xa - xb);
-    int deltaY = abs(ya - yb);
-    int p = 2 * deltaY - deltaX;
-    int twoDy = 2 * deltaY;
-    int twoDyDx = 2 * (deltaY - deltaX);
+    // Pre-compute all required values before assembly
+    int distX = std::abs(x1 - x0);
+    int distY = -std::abs(y1 - y0);
+    int sx = x0 < x1 ? 1 : -1;
+    int sy = y0 < y1 ? 1 : -1;
+    int err = distX + distY;
+    int e2;
 
-    // Initialize your bits array or other preparations as needed
-    memset(bits, 0, sizeof(bits));  // Example: clear the bits array
+    uint8_t* data_ptr = data.data();  // Get the pointer to the vector's internal buffer
 
     __asm {
+        mov eax, x0
+        mov ebx, y0
+        mov ecx, x1
+        mov edx, y1
+        mov esi, err
 
-        _Bresenham:
-            mov         eax, dword ptr[xa]
-            sub         eax, dword ptr[xb]
-            push        eax
-            mov         ebx, eax
-            neg         eax
-            cmovl       eax, ebx
-            add         esp,4
-            mov         dword ptr[deltaX], eax
+        _Bresenham :
+        // Check if the loop should end
+        cmp eax, ecx
+            jg _end_loop
+            cmp ebx, edx
+            jg _end_loop
 
-            //int deltaY = abs(ya - yb);
-            mov         eax, dword ptr[xa]
-            sub         eax, dword ptr[xb]
-            push        eax
-            mov         ebx, eax
-            neg         eax
-            cmovl       eax, ebx
-            add         esp, 4
-            mov         dword ptr[deltaX], eax
+            // Calculate the index into the 'data' buffer
+            push eax  // Save x
+            mov eax, ebx  // eax = y
+            mul dword ptr[row_stride]  // eax = y * row_stride
+            pop ebx  // Restore x
+            add eax, ebx  // eax = y * row_stride + x
+            mov ebx, data_ptr  // ebx = base address of 'data'
+            add ebx, eax  // ebx now points to the pixel location
 
-            //int p = 2 * deltaY - deltaX;
-            mov         eax, dword ptr[deltaY]
-            shl         eax, 1
-            sub         eax, dword ptr[deltaX]
-            mov         dword ptr[p], eax
+            // Set the pixel
+            mov byte ptr[ebx], 255
 
-            //int twoDy = 2 * deltaY, twoDyDx = 2 * (deltaY - deltaX);
-            mov         eax, dword ptr[deltaY]
-            shl         eax, 1
-            mov         dword ptr[twoDy], eax
-            mov         eax, dword ptr[deltaY]
-            sub         eax, dword ptr[deltaX]
-            shl         eax, 1
-            mov         dword ptr[twoDyDx], eax
+            // Calculate error and update positions
+            mov eax, esi  // eax = err
+            shl eax, 1
+            add eax, distY
+            jl _increment_y
+            add eax, distX
+            jge _next_step
 
-            //if (xa > xb);
-            mov         eax, dword ptr[xa]
-            cmp         eax, dword ptr[xb]
-            jle         else1
+            _increment_y :
+            add ebx, sy  // Increment y
 
-            //x = xb;
-            mov         eax, dword ptr[xb]
-            mov         dword ptr[x], eax
+            _next_step :
+            add eax, sx  // Increment x
+            mov esi, eax  // Update err
+            jmp _Bresenham
 
-            //y = yb;
-            mov         eax, dword ptr[yb]
-            mov         dword ptr[y], eax
-
-            //xEnd = xa;
-            mov         eax, dword ptr[xa]
-            mov         dword ptr[xEnd], eax
-
-            //bits[y][x] = 0 - bits[y][x];
-            mov         eax, dword ptr[y]
-            shl         eax, 8
-            lea         ecx, bits[eax]
-            mov         edx, dword ptr[x]
-            movsx       eax, byte ptr[ecx + edx]
-            xor ecx, ecx
-            sub         ecx, eax
-            mov         edx, dword ptr[y]
-            shl         edx, 8
-            lea         eax, bits[edx]
-            mov         edx, dword ptr[x]
-            mov         byte ptr[eax + edx], cl
-
-            jmp         while1
-
-        else1:
-            //x = xa;
-            mov         eax, dword ptr[xa]
-            mov         dword ptr[x], eax
-
-            //y = ya;
-            mov         eax, dword ptr[ya]
-            mov         dword ptr[y], eax
-
-            //xEnd = xb;
-            mov         eax, dword ptr[xb]
-            mov         dword ptr[xEnd], eax
-
-            //bits[y][x] = 0 - bits[y][x];
-            mov         eax, dword ptr[y]
-            shl         eax, 8
-            lea         ecx, bits[eax]
-            mov         edx, dword ptr[x]
-            movsx       eax, byte ptr[ecx + edx]
-            xor ecx, ecx
-            sub         ecx, eax
-            mov         edx, dword ptr[y]
-            shl         edx, 8
-            lea         eax, bits[edx]
-            mov         edx, dword ptr[x]
-            mov         byte ptr[eax + edx], cl
-
-            jmp         while1
-
-        while1:
-            //while (x < xEnd)
-            mov         eax, dword ptr[x]
-            cmp         eax, dword ptr[xEnd]
-            jge         stop_program
-
-            //x++
-            mov         eax, dword ptr[x]
-            add         eax, 1
-            mov         dword ptr[x], eax
-
-            //if (p < 0)
-            cmp         dword ptr[p], 0
-            jge         else2
-
-            //p = p + twoDy
-            mov         eax, dword ptr[p]
-            add         eax, dword ptr[twoDy]
-            mov         dword ptr[p], eax
-
-            //bits[y][x] = 0 - bits[y][x];
-            mov         eax, dword ptr[y]
-            shl         eax, 8
-            lea         ecx, bits[eax]
-            mov         edx, dword ptr[x]
-            movsx       eax, byte ptr[ecx + edx]
-            xor ecx, ecx
-            sub         ecx, eax
-            mov         edx, dword ptr[y]
-            shl         edx, 8
-            lea         eax, bits[edx]
-            mov         edx, dword ptr[x]
-            mov         byte ptr[eax + edx], cl
-
-            jmp         while1
-
-        else2:
-
-            //y++
-            mov         eax, dword ptr[y]
-            add         eax, 1
-            mov         dword ptr[y], eax
-
-            //p = p + twoDyDx
-            mov         eax, dword ptr[p]
-            add         eax, dword ptr[twoDyDx]
-            mov         dword ptr[p], eax
-
-
-            //bits[y][x] = 0 - bits[y][x];
-            mov         eax, dword ptr[y]
-            shl         eax, 8
-            lea         ecx, bits[eax]
-            mov         edx, dword ptr[x]
-            movsx       eax, byte ptr[ecx + edx]
-            xor ecx, ecx
-            sub         ecx, eax
-            mov         edx, dword ptr[y]
-            shl         edx, 8
-            lea         eax, bits[edx]
-            mov         edx, dword ptr[x]
-            mov         byte ptr[eax + edx], cl
-
-            jmp         while1
-
-
-        stop_program:
+            _end_loop :
     }
 }
 
-void draw_lineCPP(int x0, int y0, int x1, int y1, std::vector<uint8_t>& data, int row_stride) {
+// CPP Implementation
+void drawLine(int x0, int y0, int x1, int y1, std::vector<uint8_t>& data, int row_stride) {
     // Flip the y-coordinates since BMP format starts from the bottom-left corner
-    // Flip the y-coordinates
     y0 = CANVAS_WIDTH - 1 - y0;
     y1 = CANVAS_WIDTH - 1 - y1;
     
